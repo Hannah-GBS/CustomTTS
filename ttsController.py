@@ -40,13 +40,6 @@ def remove_cheermotes(raw_message):
     return message
 
 
-async def kill(listener: tuple):
-    twitch, pubsub, uuid = listener
-    await pubsub.unlisten(uuid)
-    pubsub.stop()
-    await twitch.close()
-
-
 class ttsController:
     USER_SCOPE = [AuthScope.BITS_READ]
     PREFIXES = prefixes = ["Cheer", "hryCheer", "BibleThump", "cheerwhal", "Corgo", "uni", "ShowLove", "Party",
@@ -68,11 +61,19 @@ class ttsController:
         self.app_secret = self.config['DEFAULT']['TwitchAppSecret']
         self.tts_queue = queue.Queue()
         self.tts_client = TTS(TTS.list_models()[0])
+        self.pause_flag = False
 
     def worker(self):
         while True:
             # if Cheer in queue, process it
-            item = self.tts_queue.get()
+            if self.pause_flag:
+                continue
+
+            try:
+                item = self.tts_queue.get(timeout=1)
+            except queue.Empty:
+                continue
+
             message = remove_cheermotes(item['chat_message'])
             if item['bits_used'] == 2:
                 message = convert_numbers(message)
@@ -131,6 +132,12 @@ class ttsController:
         uuid = await pubsub.listen_bits(user.id, ttsController.on_cheer)
 
         return twitch, pubsub, uuid
+
+    async def kill(self, listener: tuple):
+        twitch, pubsub, uuid = listener
+        await pubsub.unlisten(uuid)
+        pubsub.stop()
+        await twitch.close()
 
     # Get Set
 
